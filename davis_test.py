@@ -414,160 +414,88 @@ def main():
         for th in range(frames_num):
             save_frame(th, False, 'draft', True)
 
-        cache_file = os.path.join(cache_dir, 'person_%s.pkl' % video_dir)
+        for reid_target in ['person', 'object']:
+            cache_file = os.path.join(cache_dir, '%s_%s.pkl' % (reid_target, video_dir))
+            reid_score = None
 
-        if (use_cache and os.path.exists(cache_file)):
-            pred_prob, bbox_cnt = pickle_load(cache_file, encoding='latin')
-        else:
-            # person re-id
-            person_instance = []
-            for i in range(instance_num):
-                if (category[i][123] > 0.5):  # person is 123
-                    person_instance.append(i)
+            if (use_cache and os.path.exists(cache_file)):
+                pred_prob, bbox_cnt = pickle_load(cache_file, encoding='latin')
+            else:
+                target_instance = []
+                for i in range(instance_num):
+                    if (reid_target == 'object' or category[i][123] > 0.5):  # person is 123
+                        target_instance.append(i)
+                exec("reid_score = %s" % reid_target)
+                draft_cnt = 0
+                while (True):
+                    max_score = 0
+                    for i in range(1, frames_num - 1):
+                        temp_label = prob_to_label(combine_prob(pred_prob[i]))
+                        bbox_i = gen_bbox(temp_label, range(instance_num), False, 0.99)
+                        for j in target_instance:
+                            if bbox_cnt[i, j] != i and reid_score[i][j].shape[0] > 0:
+                                bbox_id = np.argmax(reid_score[i][j][:, 4])
+                                # retrieval
+                                if (appear[i, j] == 0):
+                                    x1, y1, x2, y2 = reid_score[i][j][bbox_id, 0:4]
+                                    if (reid_score[i][j][bbox_id, 4] > max_score and reid_score[i][j][bbox_id, 4] > reid_th):
 
-            draft_cnt = 0
-            while (True):
-                max_score = 0
-                for i in range(1, frames_num - 1):
-                    temp_label = prob_to_label(combine_prob(pred_prob[i]))
-                    bbox_i = gen_bbox(temp_label, range(instance_num), False, 0.99)
-                    for j in person_instance:
-                        if bbox_cnt[i, j] != i and person_reid[i][j].shape[0] > 0:
-                            bbox_id = np.argmax(person_reid[i][j][:, 4])
-                            # retrieval
-                            if (appear[i, j] == 0):
-                                x1, y1, x2, y2 = person_reid[i][j][bbox_id, 0:4]
-                                if (person_reid[i][j][bbox_id, 4] > max_score and person_reid[i][j][bbox_id, 4] > reid_th):
+                                        bbox_now = reid_score[i][j][bbox_id, 0:4].astype(int)
+                                        result = np.bincount(temp_label[bbox_now[1]:bbox_now[3] + 1, bbox_now[0]:bbox_now[2] + 1].flatten(), minlength=j + 2)
+                                        flag = True
 
-                                    bbox_now = person_reid[i][j][bbox_id, 0:4].astype(int)
-                                    result = np.bincount(temp_label[bbox_now[1]:bbox_now[3] + 1, bbox_now[0]:bbox_now[2] + 1].flatten(), minlength=j + 2)
-                                    flag = True
+                                        if flag:
+                                            for occ_instance in np.where(result[1:] > 0)[0]:
+                                                if (IoU(bbox_now, bbox_i[occ_instance]) > bbox_occ_th):
+                                                    flag = False
 
-                                    if flag:
-                                        for occ_instance in np.where(result[1:] > 0)[0]:
-                                            if (IoU(bbox_now, bbox_i[occ_instance]) > bbox_occ_th):
-                                                flag = False
+                                        if flag:
+                                            for k in target_instance:
+                                                if (k != j and appear[i, k] == 0 and reid_score[i][k][bbox_id, 4] > reid_score[i][j][bbox_id, 4]):
+                                                    flag = False
 
-                                    if flag:
-                                        for k in person_instance:
-                                            if (k != j and appear[i, k] == 0 and person_reid[i][k][bbox_id, 4] > person_reid[i][j][bbox_id, 4]):
-                                                flag = False
+                                        if flag:
+                                            max_frame = i
+                                            max_instance = j
+                                            max_bbox = reid_score[i][j][bbox_id, 0:4]
+                                            max_score = reid_score[i][j][bbox_id, 4]
 
-                                    if flag:
-                                        max_frame = i
-                                        max_instance = j
-                                        max_bbox = person_reid[i][j][bbox_id, 0:4]
-                                        max_score = person_reid[i][j][bbox_id, 4]
-
-                if (max_score == 0):
-                    break
-
-                bbox_cnt[max_frame, max_instance] = max_frame
-
-                predict_single(max_frame, max_instance, max_bbox, orig_mask[max_instance])
-                save_frame(max_frame, False, 'person_%05d_checkpoint' % draft_cnt)
-
-                temp = 0
-                for i in range(max_frame - 1, -1, -1):
-                    if appear[i, max_instance] != 0:
-                        temp = i
+                    if (max_score == 0):
                         break
-                predict(max_frame - 1, temp, -1, [max_instance])
 
-                temp = frames_num
-                for i in range(max_frame + 1, frames_num, 1):
-                    if appear[i, max_instance] != 0:
-                        temp = i
-                        break
-                predict(max_frame + 1, temp, 1, [max_instance])
-                update_appear()
+                    bbox_cnt[max_frame, max_instance] = max_frame
+
+                    predict_single(max_frame, max_instance, max_bbox, orig_mask[max_instance])
+                    save_frame(max_frame, False, '%s_%05d_checkpoint' % (reid_target, draft_cnt))
+
+                    temp = 0
+                    for i in range(max_frame - 1, -1, -1):
+                        if appear[i, max_instance] != 0:
+                            temp = i
+                            break
+                    predict(max_frame - 1, temp, -1, [max_instance])
+
+                    temp = frames_num
+                    for i in range(max_frame + 1, frames_num, 1):
+                        if appear[i, max_instance] != 0:
+                            temp = i
+                            break
+                    predict(max_frame + 1, temp, 1, [max_instance])
+                    update_appear()
+
+                    for th in range(frames_num):
+                        save_frame(th, False, '%s_%05d' % (reid_target, draft_cnt))
+
+                    draft_cnt = draft_cnt + 1
 
                 for th in range(frames_num):
-                    save_frame(th, False, 'person_%05d' % draft_cnt)
+                    save_frame(th, False, '%s' % reid_target)
 
-                draft_cnt = draft_cnt + 1
+                if use_cache:
+                    pickle_dump((pred_prob, bbox_cnt), cache_file)
 
-            for th in range(frames_num):
-                save_frame(th, False, 'person')
-
-            if use_cache:
-                pickle_dump((pred_prob, bbox_cnt), cache_file)
-
-        cache_file = os.path.join(cache_dir, 'object_%s.pkl' % video_dir)
-
-        if (use_cache and os.path.exists(cache_file)):
-            pred_prob, bbox_cnt = pickle_load(cache_file, encoding='latin')
-        else:
-            # person re-id
-            person_instance = [i for i in range(instance_num)]
-            draft_cnt = 0
-            while (True):
-                max_score = 0
-                for i in range(1, frames_num - 1):
-                    temp_label = prob_to_label(combine_prob(pred_prob[i]))
-                    bbox_i = gen_bbox(temp_label, range(instance_num), False, 0.99)
-                    for j in person_instance:
-                        if bbox_cnt[i, j] != i and object_reid[i][j].shape[0] > 0:
-                            bbox_id = np.argmax(object_reid[i][j][:, 4])
-                            # retrieval
-                            if (appear[i, j] == 0):
-                                x1, y1, x2, y2 = object_reid[i][j][bbox_id, 0:4]
-                                if (object_reid[i][j][bbox_id, 4] > max_score and object_reid[i][j][bbox_id, 4] > reid_th):
-
-                                    bbox_now = object_reid[i][j][bbox_id, 0:4].astype(int)
-                                    result = np.bincount(temp_label[bbox_now[1]:bbox_now[3] + 1, bbox_now[0]:bbox_now[2] + 1].flatten(), minlength=j + 2)
-                                    flag = True
-
-                                    if flag:
-                                        for occ_instance in np.where(result[1:] > 0)[0]:
-                                            if (IoU(bbox_now, bbox_i[occ_instance]) > bbox_occ_th):
-                                                flag = False
-
-                                    if flag:
-                                        for k in person_instance:
-                                            if (k != j and appear[i, k] == 0 and object_reid[i][k][bbox_id, 4] > object_reid[i][j][bbox_id, 4]):
-                                                flag = False
-
-                                    if flag:
-                                        max_frame = i
-                                        max_instance = j
-                                        max_bbox = object_reid[i][j][bbox_id, 0:4]
-                                        max_score = object_reid[i][j][bbox_id, 4]
-
-                if (max_score == 0):
-                    break
-
-                bbox_cnt[max_frame, max_instance] = max_frame
-
-                predict_single(max_frame, max_instance, max_bbox, orig_mask[max_instance])
-                save_frame(max_frame, False, 'object_%05d_checkpoint' % draft_cnt)
-
-                temp = 0
-                for i in range(max_frame - 1, -1, -1):
-                    if appear[i, max_instance] != 0:
-                        temp = i
-                        break
-                predict(max_frame - 1, temp, -1, [max_instance])
-
-                temp = frames_num
-                for i in range(max_frame + 1, frames_num, 1):
-                    if appear[i, max_instance] != 0:
-                        temp = i
-                        break
-                predict(max_frame + 1, temp, 1, [max_instance])
-                update_appear()
-
-                for th in range(frames_num):
-                    save_frame(th, False, 'object_%05d' % draft_cnt)
-
-                draft_cnt = draft_cnt + 1
-
-            for th in range(frames_num):
-                save_frame(th, False, 'object', True)
-                save_frame(th, False, 'result', False)
-
-            if use_cache:
-                pickle_dump((pred_prob, bbox_cnt), cache_file)
+        for th in range(frames_num):
+            save_frame(th, False, 'result', False)
 
 
 if __name__ == '__main__':

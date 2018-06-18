@@ -427,10 +427,7 @@ def main():
 
             draft_cnt = 0
             while (True):
-                max_frame = 0
-                max_instance = 0
                 max_score = 0
-                max_type = -1
                 for i in range(1, frames_num - 1):
                     temp_label = prob_to_label(combine_prob(pred_prob[i]))
                     bbox_i = gen_bbox(temp_label, range(instance_num), False, 0.99)
@@ -461,10 +458,6 @@ def main():
                                         max_instance = j
                                         max_bbox = person_reid[i][j][bbox_id, 0:4]
                                         max_score = person_reid[i][j][bbox_id, 4]
-                                        max_type = 0
-                            # correct
-                            else:
-                                pass
 
                 if (max_score == 0):
                     break
@@ -475,19 +468,17 @@ def main():
                 save_frame(max_frame, False, 'person_%05d_checkpoint' % draft_cnt)
 
                 temp = 0
-                if max_type == 0:
-                    for i in range(max_frame - 1, -1, -1):
-                        if appear[i, max_instance] != 0:
-                            temp = i
-                            break
+                for i in range(max_frame - 1, -1, -1):
+                    if appear[i, max_instance] != 0:
+                        temp = i
+                        break
                 predict(max_frame - 1, temp, -1, [max_instance])
 
                 temp = frames_num
-                if max_type == 0:
-                    for i in range(max_frame + 1, frames_num, 1):
-                        if appear[i, max_instance] != 0:
-                            temp = i
-                            break
+                for i in range(max_frame + 1, frames_num, 1):
+                    if appear[i, max_instance] != 0:
+                        temp = i
+                        break
                 predict(max_frame + 1, temp, 1, [max_instance])
                 update_appear()
 
@@ -511,11 +502,7 @@ def main():
             person_instance = [i for i in range(instance_num)]
             draft_cnt = 0
             while (True):
-                max_frame = 0
-                max_instance = 0
-                max_bbox = 0
                 max_score = 0
-                max_type = -1
                 for i in range(1, frames_num - 1):
                     temp_label = prob_to_label(combine_prob(pred_prob[i]))
                     bbox_i = gen_bbox(temp_label, range(instance_num), False, 0.99)
@@ -546,10 +533,6 @@ def main():
                                         max_instance = j
                                         max_bbox = object_reid[i][j][bbox_id, 0:4]
                                         max_score = object_reid[i][j][bbox_id, 4]
-                                        max_type = 0
-                            # correct
-                            else:
-                                pass
 
                 if (max_score == 0):
                     break
@@ -560,19 +543,17 @@ def main():
                 save_frame(max_frame, False, 'object_%05d_checkpoint' % draft_cnt)
 
                 temp = 0
-                if max_type == 0:
-                    for i in range(max_frame - 1, -1, -1):
-                        if appear[i, max_instance] != 0:
-                            temp = i
-                            break
+                for i in range(max_frame - 1, -1, -1):
+                    if appear[i, max_instance] != 0:
+                        temp = i
+                        break
                 predict(max_frame - 1, temp, -1, [max_instance])
 
                 temp = frames_num
-                if max_type == 0:
-                    for i in range(max_frame + 1, frames_num, 1):
-                        if appear[i, max_instance] != 0:
-                            temp = i
-                            break
+                for i in range(max_frame + 1, frames_num, 1):
+                    if appear[i, max_instance] != 0:
+                        temp = i
+                        break
                 predict(max_frame + 1, temp, 1, [max_instance])
                 update_appear()
 

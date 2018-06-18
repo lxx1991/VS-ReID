@@ -416,7 +416,6 @@ def main():
 
         for reid_target in ['person', 'object']:
             cache_file = os.path.join(cache_dir, '%s_%s.pkl' % (reid_target, video_dir))
-            reid_score = None
 
             if (use_cache and os.path.exists(cache_file)):
                 pred_prob, bbox_cnt = pickle_load(cache_file, encoding='latin')
@@ -425,7 +424,7 @@ def main():
                 for i in range(instance_num):
                     if (reid_target == 'object' or category[i][123] > 0.5):  # person is 123
                         target_instance.append(i)
-                exec("reid_score = %s" % reid_target)
+                reid_score = person_reid if reid_target == 'person' else object_reid
                 draft_cnt = 0
                 while (True):
                     max_score = 0

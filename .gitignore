@@ -104,5 +104,6 @@ ENV/
 .idea
 .vscode
 
-data/
-models/
+!/core/models/*
+/data
+/models
